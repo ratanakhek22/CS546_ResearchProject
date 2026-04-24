@@ -3,17 +3,29 @@ Experiment script for k-means/cluster insertions.
 Saves the vector DB created for querying later (to test quality)
 """
 import os
+import math
 import json
 import time
 import numpy as np
 import hnswlib
+import argparse
+from datetime import datetime
 from sklearn.cluster import KMeans
 from sklearn.metrics import pairwise_distances_argmin
 
-DATASET = "scifact"
+parser = argparse.ArgumentParser()
+parser.add_argument("--dataset", type=str, default="scifact")
+parser.add_argument("--trials", type=int, default=1)
+args = parser.parse_args()
+
+DATASET = args.dataset
+NUM_TRIALS = args.trials
+
+# default configs
 DATA_DIR = "datasets/"
 EMBED_DIR = f"../embeddings/{DATASET}/"
-RESULTS_DIR = "../results/"
+RUN_ID = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+RESULTS_DIR = f"../results/{DATASET}/{RUN_ID}/"
 STRATEGY = "k_clusters"
 SEED = 42
 
@@ -46,7 +58,7 @@ def generate_k_clusters(k, corpus_embeddings):
     labels = kmeans.labels_ # which cluster each document belongs to (ndarray)
     centroids = kmeans.cluster_centers_  # the k centroids (ndarray)
     preprocess_time = time.perf_counter() - start
-    
+
     return labels, centroids, preprocess_time
 
 def build_index(corpus_embeddings, labels, centroids):
@@ -99,7 +111,7 @@ def run_queries(index, query_embeddings, query_ids, corpus_ids):
 
     return results, retrieval_times
 
-def save_results(results, build_time, retrieval_times, preprocess_time):
+def save_results(trial_num, results, build_time, retrieval_times, preprocess_time):
     """
     Records the results of both the build and retrieval metrics to file.
     """
@@ -112,25 +124,29 @@ def save_results(results, build_time, retrieval_times, preprocess_time):
         "avg_retrieval_ms": round(np.mean(retrieval_times) * 1000, 4),
         "retrieval_results": results,
     }
-    out_path = os.path.join(RESULTS_DIR, f"{STRATEGY}.json")
+    out_path = os.path.join(RESULTS_DIR, f"{STRATEGY}_{trial_num}.json")
     with open(out_path, "w") as f:
         json.dump(output, f)
-    print(f"Results saved to {out_path}")
+    print(f"Results saved to {out_path}\n")
 
 if __name__ == "__main__":
     print("Loading embeddings...")
     corpus_embeddings, corpus_ids, query_embeddings, query_ids = load_embeddings()
 
-    print("Determining insertion order...")
-    labels, centroids, preprocess_time = generate_k_clusters(70, corpus_embeddings)
-    print(f"Preprocess time: {preprocess_time:.4f}s")
+    for i in range(0, NUM_TRIALS):
+        print(f"Starting Trial {i + 1}")
+        SEED += 1
+    
+        print("Determining insertion order...")
+        labels, centroids, preprocess_time = generate_k_clusters(int(math.sqrt(corpus_embeddings.shape[1])), corpus_embeddings)
+        print(f"Preprocess time: {preprocess_time:.4f}s")
 
-    print("Building HNSW index...")
-    index, build_time = build_index(corpus_embeddings, labels, centroids)
-    print(f"Build time: {build_time:.4f}s")
+        print("Building HNSW index...")
+        index, build_time = build_index(corpus_embeddings, labels, centroids)
+        print(f"Build time: {build_time:.4f}s")
 
-    print("Running queries...")
-    results, retrieval_times = run_queries(index, query_embeddings, query_ids, corpus_ids)
-    print(f"Avg retrieval time: {np.mean(retrieval_times)*1000:.4f}ms")
+        print("Running queries...")
+        results, retrieval_times = run_queries(index, query_embeddings, query_ids, corpus_ids)
+        print(f"Avg retrieval time: {np.mean(retrieval_times)*1000:.4f}ms")
 
-    save_results(results, build_time, retrieval_times, preprocess_time)
+        save_results(i, results, build_time, retrieval_times, preprocess_time)

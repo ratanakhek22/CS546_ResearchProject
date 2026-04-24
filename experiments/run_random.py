@@ -7,11 +7,22 @@ import json
 import time
 import numpy as np
 import hnswlib
+import argparse
+from datetime import datetime
 
-DATASET = "scifact"
+parser = argparse.ArgumentParser()
+parser.add_argument("--dataset", type=str, default="scifact")
+parser.add_argument("--trials", type=int, default=1)
+args = parser.parse_args()
+
+DATASET = args.dataset
+NUM_TRIALS = args.trials
+
+# default configs
 DATA_DIR = "datasets/"
 EMBED_DIR = f"../embeddings/{DATASET}/"
-RESULTS_DIR = "../results/"
+RUN_ID = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+RESULTS_DIR = f"../results/{DATASET}/{RUN_ID}/"
 STRATEGY = "random"
 SEED = 42
 
@@ -43,7 +54,7 @@ def get_insertion_order(n):
     order = np.arange(n)
     rng.shuffle(order)
     preprocess_time = time.perf_counter() - start
-    
+
     return order, preprocess_time
 
 def build_index(corpus_embeddings, order):
@@ -87,7 +98,7 @@ def run_queries(index, query_embeddings, query_ids, corpus_ids):
 
     return results, retrieval_times
 
-def save_results(results, build_time, retrieval_times, preprocess_time):
+def save_results(trial_num, results, build_time, retrieval_times, preprocess_time):
     """
     Records the results of both the build and retrieval metrics to file.
     """
@@ -100,26 +111,30 @@ def save_results(results, build_time, retrieval_times, preprocess_time):
         "avg_retrieval_ms": round(np.mean(retrieval_times) * 1000, 4),
         "retrieval_results": results,
     }
-    out_path = os.path.join(RESULTS_DIR, f"{STRATEGY}.json")
+    out_path = os.path.join(RESULTS_DIR, f"{STRATEGY}_{trial_num}.json")
     with open(out_path, "w") as f:
         json.dump(output, f)
-    print(f"Results saved to {out_path}")
+    print(f"Results saved to {out_path}\n")
 
 if __name__ == "__main__":
     print("Loading embeddings...")
     corpus_embeddings, corpus_ids, query_embeddings, query_ids = load_embeddings()
 
-    print("Determining insertion order...")
-    order, preprocess_time = get_insertion_order(len(corpus_ids))
-    # print(f"Build time: {preprocess_time:.4f}s") # uncomment incase preprocessing is relevant
-    print(f"Build time: {0:.4f}s") # hard-coded preprocessing time to 0 for random
+    for i in range(0, NUM_TRIALS):
+        print(f"Starting Trial {i + 1}")
+        SEED += 1
 
-    print("Building HNSW index...")
-    index, build_time = build_index(corpus_embeddings, order)
-    print(f"Build time: {build_time:.4f}s")
+        print("Determining insertion order...")
+        order, preprocess_time = get_insertion_order(len(corpus_ids))
+        # print(f"Build time: {preprocess_time:.4f}s") # uncomment incase preprocessing is relevant
+        print(f"Build time: {0:.4f}s") # hard-coded preprocessing time to 0 for random
 
-    print("Running queries...")
-    results, retrieval_times = run_queries(index, query_embeddings, query_ids, corpus_ids)
-    print(f"Avg retrieval time: {np.mean(retrieval_times)*1000:.4f}ms")
+        print("Building HNSW index...")
+        index, build_time = build_index(corpus_embeddings, order)
+        print(f"Build time: {build_time:.4f}s")
 
-    save_results(results, build_time, retrieval_times, 0) # hard-coded preprocessing time to 0 for random
+        print("Running queries...")
+        results, retrieval_times = run_queries(index, query_embeddings, query_ids, corpus_ids)
+        print(f"Avg retrieval time: {np.mean(retrieval_times)*1000:.4f}ms")
+
+        save_results(i, results, build_time, retrieval_times, 0) # hard-coded preprocessing time to 0 for random
