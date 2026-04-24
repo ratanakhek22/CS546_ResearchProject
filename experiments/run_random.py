@@ -10,8 +10,8 @@ import hnswlib
 
 DATASET = "scifact"
 DATA_DIR = "datasets/"
-EMBED_DIR = f"embeddings/{DATASET}/"
-RESULTS_DIR = "results/"
+EMBED_DIR = f"../embeddings/{DATASET}/"
+RESULTS_DIR = "../results/"
 STRATEGY = "random"
 SEED = 42
 
