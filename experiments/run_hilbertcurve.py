@@ -1,5 +1,5 @@
 """
-Experiment script for randomized insertion.
+Experiment script for hilbert curve insertions.
 Saves the vector DB created for querying later (to test quality)
 """
 import os
@@ -7,13 +7,16 @@ import json
 import time
 import numpy as np
 import hnswlib
+from hilbertcurve.hilbertcurve import HilbertCurve
 
 DATASET = "scifact"
 DATA_DIR = "datasets/"
 EMBED_DIR = f"../embeddings/{DATASET}/"
 RESULTS_DIR = "../results/"
-STRATEGY = "random"
+STRATEGY = "hilbert_curve"
 SEED = 42
+TARGET_DIM = 16 # 16 bit integers
+TARGET_SIZE = pow(2, TARGET_DIM) - 1
 
 HNSW_SPACE = "cosine"
 HNSW_EF_CONSTRUCTION = 200
@@ -33,23 +36,34 @@ def load_embeddings():
         query_ids = json.load(f)
     return corpus_embeddings, corpus_ids, query_embeddings, query_ids
 
-def get_insertion_order(n):
+def fit_hilbert_curve(corpus_embeddings):
     """
-    Randomizer for insertion. Done by simple suffle of index positions which can
-    be used whe inserting by indexing into the original embeded data.
+    Maps each vector to the hilbert curve and sorts them in that order to 
+    prep for the insertion step.
     """
     start = time.perf_counter()
-    rng = np.random.default_rng(seed=SEED)
-    order = np.arange(n)
-    rng.shuffle(order)
+    min_dim_vector = corpus_embeddings.min(axis=0) # find the min for each dim in vector space
+    max_dim_vector = corpus_embeddings.max(axis=0) # find the max for each dim in vector space
+
+    normalized_ratios = (corpus_embeddings - min_dim_vector) / (max_dim_vector - min_dim_vector) # ratios of all vectors
+
+    # reformat vectors: float -> int
+    int_corpus_embeddings = (normalized_ratios * TARGET_SIZE).astype(np.uint16)
+
+    # feed data into hilbert curve
+    hilbert_curve = HilbertCurve(TARGET_DIM, corpus_embeddings.shape[1]) # curve init
+    distances = hilbert_curve.distances_from_points(int_corpus_embeddings.tolist())
+
+    # get insertion order via sorting (return indices in insertion order)
+    order = np.argsort(np.array(distances)) 
     preprocess_time = time.perf_counter() - start
-    
+
     return order, preprocess_time
 
 def build_index(corpus_embeddings, order):
     """
-    Builds the HNSW indexing by inserting in order (randomly) and logs the time
-    it takes to complete the insertion.
+    Builds the HNSW indexing by inserting in order (hilbert curve) and logs the time
+    it take to complete the insertion.
     """
     dim = corpus_embeddings.shape[1]
     n = corpus_embeddings.shape[0]
@@ -110,9 +124,8 @@ if __name__ == "__main__":
     corpus_embeddings, corpus_ids, query_embeddings, query_ids = load_embeddings()
 
     print("Determining insertion order...")
-    order, preprocess_time = get_insertion_order(len(corpus_ids))
-    # print(f"Build time: {preprocess_time:.4f}s") # uncomment incase preprocessing is relevant
-    print(f"Build time: {0:.4f}s") # hard-coded preprocessing time to 0 for random
+    order, preprocess_time = fit_hilbert_curve(corpus_embeddings)
+    print(f"Preprocess time: {preprocess_time:.4f}s")
 
     print("Building HNSW index...")
     index, build_time = build_index(corpus_embeddings, order)
@@ -122,4 +135,4 @@ if __name__ == "__main__":
     results, retrieval_times = run_queries(index, query_embeddings, query_ids, corpus_ids)
     print(f"Avg retrieval time: {np.mean(retrieval_times)*1000:.4f}ms")
 
-    save_results(results, build_time, retrieval_times, 0) # hard-coded preprocessing time to 0 for random
+    save_results(results, build_time, retrieval_times, preprocess_time)

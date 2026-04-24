@@ -46,6 +46,7 @@ def generate_k_clusters(k, corpus_embeddings):
     labels = kmeans.labels_ # which cluster each document belongs to (ndarray)
     centroids = kmeans.cluster_centers_  # the k centroids (ndarray)
     preprocess_time = time.perf_counter() - start
+    
     return labels, centroids, preprocess_time
 
 def build_index(corpus_embeddings, labels, centroids):
