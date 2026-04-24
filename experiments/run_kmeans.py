@@ -14,7 +14,7 @@ DATASET = "scifact"
 DATA_DIR = "datasets/"
 EMBED_DIR = f"../embeddings/{DATASET}/"
 RESULTS_DIR = "../results/"
-STRATEGY = "random"
+STRATEGY = "k_clusters"
 SEED = 42
 
 HNSW_SPACE = "cosine"
@@ -121,7 +121,7 @@ if __name__ == "__main__":
     corpus_embeddings, corpus_ids, query_embeddings, query_ids = load_embeddings()
 
     print("Determining insertion order...")
-    labels, centroids, preprocess_time = generate_k_clusters(70, corpus_ids)
+    labels, centroids, preprocess_time = generate_k_clusters(70, corpus_embeddings)
     print(f"Preprocess time: {preprocess_time:.4f}s")
 
     print("Building HNSW index...")
