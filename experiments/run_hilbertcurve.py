@@ -1,6 +1,10 @@
 """
 Experiment script for hilbert curve insertions.
 Saves the vector DB created for querying later (to test quality)
+
+Usage:
+    python run_hilbertcurve.py --dataset scifact
+    python run_hilbertcurve.py --dataset scifact --trials 5
 """
 import os
 import json
@@ -14,6 +18,7 @@ from hilbertcurve.hilbertcurve import HilbertCurve
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, default="scifact")
 parser.add_argument("--trials", type=int, default=1)
+parser.add_argument("--run-id", type=str, default=None) # for organizing tests into batches
 args = parser.parse_args()
 
 DATASET = args.dataset
@@ -23,7 +28,7 @@ NUM_TRIALS = args.trials
 DATASET = "scifact"
 DATA_DIR = "datasets/"
 EMBED_DIR = f"../embeddings/{DATASET}/"
-RUN_ID = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+RUN_ID = args.run_id or datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 RESULTS_DIR = f"../results/{DATASET}/{RUN_ID}/"
 STRATEGY = "hilbert_curve"
 SEED = 42
