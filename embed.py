@@ -4,17 +4,25 @@ Sets up vectors for testing and experiements.
 Initially loads a dataset from BEIR (unless its already cached)
 and converts them into vectors for later operations on using a LM 
 (specified by MODEL_NAME), storing them into the local cache.
+
+Usage:
+    python embed.py --dataset scifact
 """
 
 import os
 import json
 import numpy as np
+import argparse
 from beir import util
 from beir.datasets.data_loader import GenericDataLoader
 from sentence_transformers import SentenceTransformer
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--dataset", type=str, default="scifact")
+args = parser.parse_args()
+
 # Configs
-DATASET = "scifact"
+DATASET = args.dataset
 DATA_DIR = "datasets/"
 EMBED_DIR = f"embeddings/{DATASET}/"
 MODEL_NAME = "all-MiniLM-L6-v2"

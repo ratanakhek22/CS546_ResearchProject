@@ -25,7 +25,6 @@ DATASET = args.dataset
 NUM_TRIALS = args.trials
 
 # default configs
-DATASET = "scifact"
 DATA_DIR = "datasets/"
 EMBED_DIR = f"../embeddings/{DATASET}/"
 RUN_ID = args.run_id or datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
