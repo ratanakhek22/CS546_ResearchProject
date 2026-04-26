@@ -7,6 +7,7 @@ evaluated on BEIR benchmark datasets using Recall@10 and NDCG@10 as primary
 quality metrics.
 
 ## Project Structure
+```
 project/
 ├── embeddings/              # Cached embeddings per dataset (gitignored)
 ├── datasets/                # BEIR downloads (gitignored)
@@ -22,6 +23,7 @@ project/
 │   └── visualize.py         # Generates HTML report from results
 ├── embed.py                 # Computes and caches embeddings
 └── requirements.txt         # Python dependencies
+```
 
 ## Requirements
 
