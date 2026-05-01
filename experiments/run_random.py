@@ -16,6 +16,7 @@ from datetime import datetime
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, default="scifact")
+parser.add_argument("--efconstruction", type=int, default=32)
 parser.add_argument("--trials", type=int, default=1)
 parser.add_argument("--run-id", type=str, default=None) # for organizing tests into batches
 args = parser.parse_args()
@@ -32,7 +33,7 @@ STRATEGY = "random"
 SEED = 42
 
 HNSW_SPACE = "cosine"
-HNSW_EF_CONSTRUCTION = 200
+HNSW_EF_CONSTRUCTION = args.efconstruction
 HNSW_M = 16
 HNSW_EF_SEARCH = 50
 TOP_K = 10
@@ -110,6 +111,7 @@ def save_results(trial_num, results, build_time, retrieval_times, preprocess_tim
     os.makedirs(RESULTS_DIR, exist_ok=True)
     output = {
         "strategy": STRATEGY,
+        "ef_construction": HNSW_EF_CONSTRUCTION,
         "preprocess_time_seconds": round(preprocess_time, 4),
         "build_time_seconds": round(build_time, 4),
         "total_time_seconds": round(preprocess_time + build_time, 4),

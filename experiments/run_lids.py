@@ -1,10 +1,10 @@
 """
-Experiment script for hilbert curve insertions.
+Experiment script for replicating LID based inerstion.
 Saves the vector DB created for querying later (to test quality)
 
 Usage:
-    python run_hilbertcurve.py --dataset scifact
-    python run_hilbertcurve.py --dataset scifact --trials 5
+    python run_lids.py --dataset scifact
+    python run_lids.py --dataset scifact --trials 5
 """
 import os
 import json
@@ -13,7 +13,6 @@ import numpy as np
 import hnswlib
 import argparse
 from datetime import datetime
-from hilbertcurve.hilbertcurve import HilbertCurve
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, default="scifact")
@@ -30,16 +29,15 @@ DATA_DIR = "datasets/"
 EMBED_DIR = f"../embeddings/{DATASET}/"
 RUN_ID = args.run_id or datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 RESULTS_DIR = f"../results/{DATASET}/{RUN_ID}/"
-STRATEGY = "hilbert_curve"
+STRATEGY = "lids"
 SEED = 42
-TARGET_DIM = 16 # 16 bit integers
-TARGET_SIZE = pow(2, TARGET_DIM) - 1
 
 HNSW_SPACE = "cosine"
 HNSW_EF_CONSTRUCTION = args.efconstruction
 HNSW_M = 16
 HNSW_EF_SEARCH = 50
 TOP_K = 10
+LID_K = 100
 
 def load_embeddings():
     """
@@ -53,33 +51,47 @@ def load_embeddings():
         query_ids = json.load(f)
     return corpus_embeddings, corpus_ids, query_embeddings, query_ids
 
-def fit_hilbert_curve(corpus_embeddings):
+def build_brute_force(corpus_embeddings, corpus_ids):
     """
-    Maps each vector to the hilbert curve and sorts them in that order to 
-    prep for the insertion step.
+    Builds an exact brute force index over the corpus.
+    Used as ground truth for Recall@k.
     """
     start = time.perf_counter()
-    min_dim_vector = corpus_embeddings.min(axis=0) # find the min for each dim in vector space
-    max_dim_vector = corpus_embeddings.max(axis=0) # find the max for each dim in vector space
+    dim = corpus_embeddings.shape[1]
+    n = corpus_embeddings.shape[0]
+    bf = hnswlib.BFIndex(space="cosine", dim=dim)
+    bf.init_index(max_elements=n)
+    bf.add_items(corpus_embeddings, list(range(n)))
+    preprocess_time = time.perf_counter() - start
 
-    normalized_ratios = (corpus_embeddings - min_dim_vector) / (max_dim_vector - min_dim_vector) # ratios of all vectors
+    return bf, preprocess_time
 
-    # reformat vectors: float -> int
-    int_corpus_embeddings = (normalized_ratios * TARGET_SIZE).astype(np.uint16)
+def rank_LIDs(corpus_embeddings, bf_index):
+    """
+    Find the density of all vectors. Order them by high to low density and return the ordering. 
+    """
+    start = time.perf_counter()
+    n = corpus_embeddings.shape[0]
 
-    # feed data into hilbert curve
-    hilbert_curve = HilbertCurve(TARGET_DIM, corpus_embeddings.shape[1]) # curve init
-    distances = hilbert_curve.distances_from_points(int_corpus_embeddings.tolist())
+    lid_scores = np.zeros(n) # for calculated scores
+    for i in range(n):
+        labels, distances = bf_index.knn_query(corpus_embeddings[i], k=101)
+        distances = distances[0][1:]
+        distances = np.maximum(distances, 1e-10)
+        r_max = distances[-1]
 
-    # get insertion order via sorting (return indices in insertion order)
-    order = np.argsort(np.array(distances)) 
+        # calculate the density score for this vector center
+        lid_scores[i] = -1.0 / np.mean(np.log(distances / r_max))
+
+    # get sorted order
+    order = np.argsort(lid_scores)[::-1]
     preprocess_time = time.perf_counter() - start
 
     return order, preprocess_time
 
 def build_index(corpus_embeddings, order):
     """
-    Builds the HNSW indexing by inserting in order (hilbert curve) and logs the time
+    Builds the HNSW indexing by inserting in order (LID ranks) and logs the time
     it take to complete the insertion.
     """
     dim = corpus_embeddings.shape[1]
@@ -141,13 +153,17 @@ if __name__ == "__main__":
     print("Loading embeddings...")
     corpus_embeddings, corpus_ids, query_embeddings, query_ids = load_embeddings()
 
+    # calculate brute force once to save time, can do per trial in commented out lines
+    bf_index, bf_preprocess_time = build_brute_force(corpus_embeddings, corpus_ids)
+
     for i in range(0, NUM_TRIALS):
         print(f"Starting Trial {i + 1}")
         SEED += 1
-
+    
         print("Determining insertion order...")
-        order, preprocess_time = fit_hilbert_curve(corpus_embeddings)
-        print(f"Preprocess time: {preprocess_time:.4f}s")
+        # bf_index, bf_preprocess_time = build_brute_force(corpus_embeddings, corpus_ids) # per trial version of bf_index step
+        order, preprocess_time = rank_LIDs(corpus_embeddings, bf_index)
+        print(f"Preprocess time: {(preprocess_time + bf_preprocess_time):.4f}s")
 
         print("Building HNSW index...")
         index, build_time = build_index(corpus_embeddings, order)

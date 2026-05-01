@@ -62,7 +62,8 @@ def load_and_average(run_dir):
         with open(os.path.join(run_dir, fname)) as f:
             data = json.load(f)
         strategy = data.get("strategy", fname.split("_")[0])
-        grouped.setdefault(strategy, []).append(data)
+        key = f"{strategy}_ef{data.get('ef_construction', 'unknown')}"
+        grouped.setdefault(key, []).append(data)
 
     averaged = {}
     for strategy, trials in grouped.items():

@@ -1,19 +1,22 @@
 """
-Experiment script for hilbert curve insertions.
+Experiment script for approximating density for insertion order.
 Saves the vector DB created for querying later (to test quality)
 
 Usage:
-    python run_hilbertcurve.py --dataset scifact
-    python run_hilbertcurve.py --dataset scifact --trials 5
+    python run_approx_density.py --dataset scifact
+    python run_approx_density.py --dataset scifact --trials 5
+    python run_approx_density.py --dataset scifact -- 5
 """
 import os
+import math
 import json
 import time
 import numpy as np
 import hnswlib
 import argparse
 from datetime import datetime
-from hilbertcurve.hilbertcurve import HilbertCurve
+from sklearn.cluster import KMeans
+from sklearn.metrics import pairwise_distances
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, default="scifact")
@@ -30,10 +33,8 @@ DATA_DIR = "datasets/"
 EMBED_DIR = f"../embeddings/{DATASET}/"
 RUN_ID = args.run_id or datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 RESULTS_DIR = f"../results/{DATASET}/{RUN_ID}/"
-STRATEGY = "hilbert_curve"
+STRATEGY = "approx_density"
 SEED = 42
-TARGET_DIM = 16 # 16 bit integers
-TARGET_SIZE = pow(2, TARGET_DIM) - 1
 
 HNSW_SPACE = "cosine"
 HNSW_EF_CONSTRUCTION = args.efconstruction
@@ -53,33 +54,41 @@ def load_embeddings():
         query_ids = json.load(f)
     return corpus_embeddings, corpus_ids, query_embeddings, query_ids
 
-def fit_hilbert_curve(corpus_embeddings):
+def find_centroids(k, corpus_embeddings):
     """
-    Maps each vector to the hilbert curve and sorts them in that order to 
-    prep for the insertion step.
+    Fit k-means to find k cluster centroids.
+    """
+    kmeans = KMeans(n_clusters=k, random_state=SEED)
+    kmeans.fit(corpus_embeddings)
+
+    centroids = kmeans.cluster_centers_  # the k centroids (ndarray)
+
+    return centroids
+
+def rank_density(corpus_embeddings):
+    """
+    Using centroid heads, use the closest one to each vector to approximate high and low LID vectors. 
+    Returns the order based on the gap rank.
     """
     start = time.perf_counter()
-    min_dim_vector = corpus_embeddings.min(axis=0) # find the min for each dim in vector space
-    max_dim_vector = corpus_embeddings.max(axis=0) # find the max for each dim in vector space
+    n = corpus_embeddings.shape[0]
+    centroids = find_centroids(int(math.sqrt(n)), corpus_embeddings)
 
-    normalized_ratios = (corpus_embeddings - min_dim_vector) / (max_dim_vector - min_dim_vector) # ratios of all vectors
+    # shape (n_vectors, n_centroids)
+    dist_matrix = pairwise_distances(corpus_embeddings, centroids, metric="cosine")
 
-    # reformat vectors: float -> int
-    int_corpus_embeddings = (normalized_ratios * TARGET_SIZE).astype(np.uint16)
+    # minimum distance to any centroid per vector
+    min_centroid_dist = dist_matrix.min(axis=1)
 
-    # feed data into hilbert curve
-    hilbert_curve = HilbertCurve(TARGET_DIM, corpus_embeddings.shape[1]) # curve init
-    distances = hilbert_curve.distances_from_points(int_corpus_embeddings.tolist())
-
-    # get insertion order via sorting (return indices in insertion order)
-    order = np.argsort(np.array(distances)) 
+    # sort descending — farthest from any centroid = most outlier-like = high LID approximation
+    order = np.argsort(min_centroid_dist)[::-1]
     preprocess_time = time.perf_counter() - start
 
     return order, preprocess_time
 
 def build_index(corpus_embeddings, order):
     """
-    Builds the HNSW indexing by inserting in order (hilbert curve) and logs the time
+    Builds the HNSW indexing by inserting in order (approx LID/density ranks) and logs the time
     it take to complete the insertion.
     """
     dim = corpus_embeddings.shape[1]
@@ -144,9 +153,9 @@ if __name__ == "__main__":
     for i in range(0, NUM_TRIALS):
         print(f"Starting Trial {i + 1}")
         SEED += 1
-
+    
         print("Determining insertion order...")
-        order, preprocess_time = fit_hilbert_curve(corpus_embeddings)
+        order, preprocess_time = rank_density(corpus_embeddings)
         print(f"Preprocess time: {preprocess_time:.4f}s")
 
         print("Building HNSW index...")
