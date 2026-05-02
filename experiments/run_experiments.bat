@@ -40,12 +40,12 @@ python run_hilbertcurve.py --dataset %DATASET% --efconstruction %EF% --trials %T
 if %errorlevel% neq 0 ( echo FAILED: run_hilbert.py & exit /b 1 )
 
 echo.
-echo [4/7] Evaluating results...
+echo [4/7] Running LID Ordering insertion...
 python run_lids.py --dataset %DATASET% --efconstruction %EF% --trials %TRIALS% --run-id %RUN_ID%
 if %errorlevel% neq 0 ( echo FAILED: evaluate.py & exit /b 1 )
 
 echo.
-echo [5/7] Evaluating results...
+echo [5/7] Running Density Approcimation Ordering insertion...
 python run_approx_density.py --dataset %DATASET% --efconstruction %EF% --trials %TRIALS% --run-id %RUN_ID%
 if %errorlevel% neq 0 ( echo FAILED: evaluate.py & exit /b 1 )
 
@@ -89,12 +89,12 @@ python run_hilbertcurve.py --dataset %DATASET% --efconstruction %EF% --trials %T
 if %errorlevel% neq 0 ( echo FAILED: run_hilbert.py & exit /b 1 )
 
 echo.
-echo [4/7] Evaluating results...
+echo [4/7] Running LID Ordering insertion...
 python run_lids.py --dataset %DATASET% --efconstruction %EF% --trials %TRIALS% --run-id %RUN_ID%
 if %errorlevel% neq 0 ( echo FAILED: evaluate.py & exit /b 1 )
 
 echo.
-echo [5/7] Evaluating results...
+echo [5/7] Running Density Approcimation Ordering insertion...
 python run_approx_density.py --dataset %DATASET% --efconstruction %EF% --trials %TRIALS% --run-id %RUN_ID%
 if %errorlevel% neq 0 ( echo FAILED: evaluate.py & exit /b 1 )
 
